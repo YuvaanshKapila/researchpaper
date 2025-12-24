@@ -214,4 +214,3 @@ def record_allocation_change(participant_id, condition, baseline, final):
         'timestamp': pd.Timestamp.now()
     }
 
-Code repository available at: [GitHub repository link to be added upon publication]
