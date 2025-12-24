@@ -1,0 +1,217 @@
+Appendix A: Implementation Code
+A.1 Data Preprocessing
+import re
+import pandas as pd
+
+def clean_headline(text):
+    """
+    Clean and normalize financial text data.
+    
+    Parameters:
+    text (str): Raw text input
+    
+    Returns:
+    str: Cleaned text
+    """
+    if not isinstance(text, str):
+        return ""
+    text = text.lower()
+    text = re.sub(r'["]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+    return text
+
+def balance_data(df):
+    """
+    Balance dataset classes through stratified sampling.
+    
+    Parameters:
+    df (DataFrame): Unbalanced dataset
+    
+    Returns:
+    DataFrame: Balanced dataset
+    """
+    min_size = df['sentiment'].value_counts().min()
+    balanced_df = pd.concat([
+        df[df['sentiment'] == c].sample(min_size, random_state=42) 
+        for c in df['sentiment'].unique()
+    ])
+    return balanced_df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+A.2 Neural Network Architecture
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, GlobalAveragePooling1D, Dense
+
+def build_model(vocab_size=10000, embedding_dim=16, max_length=100):
+    """
+    Build shallow neural network for sentiment classification.
+    
+    Parameters:
+    vocab_size (int): Size of vocabulary
+    embedding_dim (int): Dimension of embedding space
+    max_length (int): Maximum sequence length
+    
+    Returns:
+    Sequential: Compiled Keras model
+    """
+    model = Sequential([
+        Embedding(input_dim=vocab_size, 
+                 output_dim=embedding_dim, 
+                 input_length=max_length),
+        GlobalAveragePooling1D(),
+        Dense(24, activation='relu'),
+        Dense(12, activation='relu'),
+        Dense(3, activation='softmax')
+    ])
+    
+    model.compile(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    return model
+
+A.3 Model Training
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.utils.class_weight import compute_class_weight
+import numpy as np
+
+def train_model(model, X_train, y_train, X_val, y_val):
+    """
+    Train neural network with early stopping and class balancing.
+    
+    Parameters:
+    model: Keras model
+    X_train, y_train: Training data
+    X_val, y_val: Validation data
+    
+    Returns:
+    dict: Training history and metrics
+    """
+    # Compute class weights for imbalanced data
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(y_train),
+        y=y_train
+    )
+    class_weight_dict = dict(enumerate(class_weights))
+    
+    # Early stopping callback
+    early_stop = EarlyStopping(
+        monitor='val_loss',
+        patience=3,
+        restore_best_weights=True
+    )
+    
+    # Train model
+    history = model.fit(
+        X_train, y_train,
+        validation_data=(X_val, y_val),
+        epochs=25,
+        batch_size=32,
+        class_weight=class_weight_dict,
+        callbacks=[early_stop]
+    )
+    
+    # Evaluate model
+    y_pred_probs = model.predict(X_val)
+    y_pred = np.argmax(y_pred_probs, axis=1)
+    
+    acc = accuracy_score(y_val, y_pred)
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y_val, y_pred, 
+        average='weighted'
+    )
+    
+    return {
+        'history': history,
+        'accuracy': acc,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1,
+        'predictions': y_pred
+    }
+
+A.4 Random Forest Implementation
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+def train_random_forest(X_train_text, y_train, X_test_text, y_test):
+    """
+    Train Random Forest classifier for sentiment analysis.
+    
+    Parameters:
+    X_train_text: Training text data
+    y_train: Training labels
+    X_test_text: Test text data
+    y_test: Test labels
+    
+    Returns:
+    dict: Model and performance metrics
+    """
+    # Feature extraction
+    vectorizer = TfidfVectorizer(max_features=10000, ngram_range=(1, 2))
+    X_train = vectorizer.fit_transform(X_train_text)
+    X_test = vectorizer.transform(X_test_text)
+    
+    # Train model
+    rf = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=50,
+        min_samples_split=5,
+        random_state=42,
+        n_jobs=-1
+    )
+    rf.fit(X_train, y_train)
+    
+    # Predictions
+    y_pred = rf.predict(X_test)
+    
+    # Calculate metrics
+    accuracy = accuracy_score(y_test, y_pred)
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y_test, y_pred,
+        average='weighted'
+    )
+    
+    return {
+        'model': rf,
+        'vectorizer': vectorizer,
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1
+    }
+
+A.5 Experimental Data Collection
+def record_allocation_change(participant_id, condition, baseline, final):
+    """
+    Calculate and record allocation changes.
+    
+    Parameters:
+    participant_id: Unique participant identifier
+    condition: Experimental condition (bullish/bearish/neutral)
+    baseline: Initial allocation dictionary
+    final: Final allocation dictionary
+    
+    Returns:
+    dict: Allocation changes and metrics
+    """
+    changes = {}
+    for asset_class in baseline.keys():
+        changes[asset_class] = final[asset_class] - baseline[asset_class]
+    
+    total_risky_change = (changes.get('crypto', 0) + 
+                         changes.get('stocks', 0))
+    
+    return {
+        'participant_id': participant_id,
+        'condition': condition,
+        'changes': changes,
+        'total_risky_change': total_risky_change,
+        'timestamp': pd.Timestamp.now()
+    }
+
+Code repository available at: [GitHub repository link to be added upon publication]
